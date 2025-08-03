@@ -26,9 +26,9 @@ M = int(sys.argv[1])
 K = int(sys.argv[2])
 N = int(sys.argv[3])
 
-A = torch.randn(M, K, dtype=torch.float16)
-B = torch.randn(K, N, dtype=torch.float16)
-C = torch.matmul(A.float(), B.float()).half()
+A = torch.randn(M, K, dtype=torch.half)
+B = torch.randn(K, N, dtype=torch.half)
+C = torch.matmul(A, B)
 
 save_file({
     "A": A,

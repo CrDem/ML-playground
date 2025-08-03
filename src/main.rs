@@ -105,7 +105,7 @@ fn main() -> anyhow::Result<()> {
     let module = ctx.load_module(Ptx::from_file("./shaders/matmul.ptx"))?;
     let func = module.load_function("gemm_kernel_fp16").unwrap();
 
-    let threads_per_block = (16, 16, 1);
+    let threads_per_block = (32, 32, 1);
     let blocks_per_grid = (
         (n + threads_per_block.0 - 1) / threads_per_block.0,
         (m + threads_per_block.1 - 1) / threads_per_block.1,
@@ -132,7 +132,7 @@ fn main() -> anyhow::Result<()> {
     let duration = start.elapsed();
     let total_ops = (2 * m * n * k - m * n) as f64;
     let gflops = total_ops / duration.as_secs_f64() / 1e9;
-    println!("{} took {:?}, GFLOPS: {}", "Computation", duration, gflops);
+    println!("Computation took {} ms\nGFLOPS: {}", duration.as_millis(), gflops);
 
     info!("Copying result back");
     let mut c = vec![F16(half::f16::ZERO); a.size.0 * b.size.1];
