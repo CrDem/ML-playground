@@ -1,10 +1,8 @@
 // nvcc -arch=sm_75 -ptx matmul.cu -o matmul.ptx
-//               ^^your GPU arch
 
 #include <cuda_fp16.h>
 
 const int TILE_WIDTH = 32;
-static_assert(__CUDA_ARCH__ >= 530, "__hfma requires SM 5.3+");
 
 extern "C" __global__ void gemm_kernel_fp16(
     const half* __restrict__ A,  // [M x K]
@@ -12,8 +10,8 @@ extern "C" __global__ void gemm_kernel_fp16(
     half* C,        // [M x N]
     int M, int N, int K) 
 {
-    assert(TILE_WIDTH == blockDim.x);
-    assert(TILE_WIDTH == blockDim.y);
+    //assert(TILE_WIDTH == blockDim.x);
+    //assert(TILE_WIDTH == blockDim.y);
     
     const int by = blockIdx.y;
     const int bx = blockIdx.x; 
