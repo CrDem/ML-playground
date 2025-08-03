@@ -1,6 +1,6 @@
 ### Info
-GeMM: MxK @ KxN = MxN
-! shaders/matmul.cu need to be pre-compiled
+GeMM: MxK @ KxN = MxN  
+**!** shaders/matmul.cu need to be pre-compiled
 
 ### Usage:
 ```bash
@@ -43,10 +43,10 @@ tensor([[-14.6562,  53.3125, -22.1406,  ..., -11.0703, -24.4531,  23.2031],
 RMSE: 0.000583171239
 ```
 
-### benchmarks:
+### Benchmarks:
 Device: NVIDIA GeForce RTX 2070 SUPER
 
-Kernel: Tiled Matmul - Half Precision with Float Accumulation
+Kernel: Tiled Matmul - Half Precision with Float Accumulation  
 Tile size: 32x32
 | M    | K    | N    | GFLOPS  | RMSE     |
 | ---- | ---- | ---- | ------- | -------- |
