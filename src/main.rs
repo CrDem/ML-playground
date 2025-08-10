@@ -11,8 +11,6 @@ use cudarc::{
     nvrtc::Ptx,
 };
 
-use std::time::Instant;
-
 ///////// локальная обёртка вокруг half::f16: /////////
 #[repr(transparent)]
 #[derive(Clone, Copy)]
@@ -88,9 +86,6 @@ fn main() -> anyhow::Result<()> {
 
     info!("Initialization cuda context");
     let ctx = CudaContext::new(0)?;
-    ctx.set_flags(cudarc::driver::sys::CUctx_flags::CU_CTX_SCHED_BLOCKING_SYNC)?; // stream.synchronize() Will only block CPU 
-                                                                                  // if you call CudaContext::set_flags with 
-                                                                                  // sys::CUctx_flags::CU_CTX_SCHED_BLOCKING_SYNC.
     let stream = ctx.default_stream();
 
     info!("Binding data");
@@ -124,15 +119,25 @@ fn main() -> anyhow::Result<()> {
     launch_args.arg(&n);
     launch_args.arg(&k);
 
-    let start = Instant::now();
     info!("Launching kernel");
-    unsafe { launch_args.launch(cfg) }?;
-    stream.synchronize()?;
+    let start = ctx.new_event(Some(cudarc::driver::sys::CUevent_flags::CU_EVENT_BLOCKING_SYNC))?;
+    let stop = ctx.new_event(Some(cudarc::driver::sys::CUevent_flags::CU_EVENT_BLOCKING_SYNC))?;
 
-    let duration = start.elapsed();
+    // Launch the kernel a few times to avoid cold start
+    for _ in 0..5 {
+        unsafe { launch_args.launch(cfg) }?;
+    }
+
+    start.record(&stream)?;
+    unsafe { launch_args.launch(cfg) }?;
+    stop.record(&stream)?;
+
+    stop.synchronize()?;
+
+    let elapsed_ms = start.elapsed_ms(&stop)? as f64;
     let total_ops = (2 * m * n * k - m * n) as f64;
-    let gflops = total_ops / duration.as_secs_f64() / 1e9;
-    println!("Computation took {} ms\nGFLOPS: {}", duration.as_millis(), gflops);
+    let gflops = total_ops / elapsed_ms / 1e6;
+    println!("Computation took {} ms\nGFLOPS: {}", elapsed_ms, gflops);
 
     info!("Copying result back");
     let mut c = vec![F16(half::f16::ZERO); a.size.0 * b.size.1];
