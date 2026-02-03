@@ -1,49 +1,56 @@
 // nvcc -arch=sm_75 -ptx matmul.cu -o matmul.ptx
 
 #include <cuda_fp16.h>
+#include <mma.h>
 
-const int TILE_WIDTH = 32;
+using namespace nvcuda;
 
 extern "C" __global__ void gemm_kernel_fp16(
     const half* __restrict__ A,  // [M x K]
     const half* __restrict__ B,  // [K x N]
-    half* C,        // [M x N]
-    int M, int N, int K) 
+    half* C,                     // [M x N]
+    int M, int N, int K)
 {
-    //assert(TILE_WIDTH == blockDim.x);
-    //assert(TILE_WIDTH == blockDim.y);
-    
-    const int by = blockIdx.y;
-    const int bx = blockIdx.x; 
+    const int tileRow = blockIdx.y * 16;
+    const int tileCol = blockIdx.x * 16;
+    const int tx = threadIdx.x;
+    const int ti = tx / 16;
+    const int tj = tx % 16;
 
-    const int ty = threadIdx.y;
-    const int tx = threadIdx.x; 
+    __shared__ half As[16 * 16];
+    __shared__ half Bs[16 * 16];
 
-    const int row = TILE_WIDTH*by + ty; // row on C
-    const int col = TILE_WIDTH*bx + tx; // col on C
+    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
+    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
+    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag;
 
-    __shared__ half sh_A[TILE_WIDTH][TILE_WIDTH];
-    __shared__ half sh_B[TILE_WIDTH][TILE_WIDTH];
+    wmma::fill_fragment(acc_frag, 0.0f);
 
-    float value = 0.0f;
-    const int phases = (K + TILE_WIDTH - 1) / TILE_WIDTH;
-    for (int phase = 0; phase < phases; phase++)
-    {
-        // Load Tiles into shared memory
-        int A_col = phase * TILE_WIDTH + tx;
-        int B_row = phase * TILE_WIDTH + ty;
-        sh_A[ty][tx] = (row < M && A_col < K) ? A[row * K + A_col] : __float2half(0.0f);
-        sh_B[ty][tx] = (B_row < K && col < N) ? B[B_row * N + col] : __float2half(0.0f);
-        __syncthreads();
+    for (int k0 = 0; k0 < K; k0 += 16) {
 
-        // Dot product
-        for (int k = 0; k < TILE_WIDTH; k++) {
-            value += __half2float(sh_A[ty][k]) * __half2float(sh_B[k][tx]);
+        // coop load
+        for (int i = 0; i < 16; i+=2) {
+            int row = tileRow + i + ti;
+            int col = tileCol + tj;
+            As[(i + ti) * 16 + tj] = (row < M && (k0 + tj) < K) ? A[row * K + k0 + tj] : __float2half(0.0f);
+            Bs[(i + ti) * 16 + tj] = (col < N && (k0 + i + ti) < K) ? B[(k0 + i + ti) * N + col] : __float2half(0.0f);
         }
-        __syncthreads();
+
+        wmma::load_matrix_sync(a_frag, As, 16);
+        wmma::load_matrix_sync(b_frag, Bs, 16);
+
+        wmma::mma_sync(acc_frag, a_frag, b_frag, acc_frag);
     }
 
-    // Assigning calculated value
-    if (row < M && col < N)
-        C[row * N + col] = __float2half(value);
+    __shared__ float c_tile[16 * 16];
+    wmma::store_matrix_sync(c_tile, acc_frag, 16, wmma::mem_row_major);
+
+    // coop load
+    for (int i = 0; i < 16; i+=2) {
+        int row = tileRow + i + ti;
+        int col = tileCol + tj;
+        if (row < M && col < N) {
+            C[row * N + col] = __float2half(c_tile[(i + ti) * 16 + tj]);
+        }
+    }
 }

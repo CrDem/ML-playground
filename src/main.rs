@@ -11,6 +11,9 @@ use cudarc::{
     nvrtc::Ptx,
 };
 
+/*use cudarc::cublas::sys::*;
+use cudarc::cublas::sys::CUstream_st;*/
+
 ///////// локальная обёртка вокруг half::f16: /////////
 #[repr(transparent)]
 #[derive(Clone, Copy)]
@@ -96,14 +99,72 @@ fn main() -> anyhow::Result<()> {
     stream.memcpy_htod(&a_wrapped.data, &mut d_a)?;
     stream.memcpy_htod(&b_wrapped.data, &mut d_b)?;
 
+    /*info!("preparing cublas");
+    let mut handle: cublasHandle_t = std::ptr::null_mut();
+    unsafe { cublasCreate_v2(&mut handle); }
+
+    let raw_stream: cudarc::cublas::sys::CUstream_st = stream.cu_stream();
+     unsafe { cublasSetStream_v2(handle, raw_stream); }
+
+    let alpha: f32 = 1.0;
+    let beta: f32 = 0.0;
+
+    info!("Launching cublas");
+    let start = ctx.new_event(Some(cudarc::driver::sys::CUevent_flags::CU_EVENT_BLOCKING_SYNC))?;
+    let stop: ! = ctx.new_event(Some(cudarc::driver::sys::CUevent_flags::CU_EVENT_BLOCKING_SYNC))?;
+
+    // прогрев
+    for _ in 0..3 {
+        unsafe { cublasGemmEx(
+            handle,
+            cublasOperation_t::CUBLAS_OP_T, // A — без транспонирования
+            cublasOperation_t::CUBLAS_OP_T, // B — без транспонирования
+            n, m, k,
+            &alpha as *const f32 as *const std::ffi::c_void,
+            d_b, cudaDataType::CUDA_R_16F, k,
+            d_a, cudaDataType::CUDA_R_16F, m,
+            &beta as *const f32 as *const std::ffi::c_void,
+            d_c, cudaDataType::CUDA_R_16F, n,
+            cublasComputeType_t::CUBLAS_COMPUTE_32F,
+            cublasGemmAlgo_t::CUBLAS_GEMM_DEFAULT,
+        ); }
+    }
+
+    // тайминг
+    start.record(stream)?;
+    unsafe { cublasGemmEx(
+        handle,
+        cublasOperation_t::CUBLAS_OP_N,
+        cublasOperation_t::CUBLAS_OP_N,
+        n, m, k,
+        &alpha as *const f32 as *const std::ffi::c_void,
+        d_b, cudaDataType::CUDA_R_16F, n,
+        d_a, cudaDataType::CUDA_R_16F, k,
+        &beta as *const f32 as *const std::ffi::c_void,
+        d_c, cudaDataType::CUDA_R_16F, n,
+        cublasComputeType_t::CUBLAS_COMPUTE_32F,
+        cublasGemmAlgo_t::CUBLAS_GEMM_DEFAULT,
+    ); }
+    stop.record(stream)?;
+    stop.synchronize()?;
+
+    let elapsed_ms = start.elapsed_ms(&stop)? as f64;
+    let total_ops = (2.0 * m as f64 * n as f64 * k as f64 - m as f64 * n as f64);
+    let gflops = total_ops / elapsed_ms / 1e6;
+
+    println!("cuBLAS GEMM took {:.3} ms | {:.3} GFLOPS", elapsed_ms, gflops);
+
+    // очистка
+    unsafe { cublasDestroy_v2(handle); }*/
+
     info!("Loading PTX module");
     let module = ctx.load_module(Ptx::from_file("./shaders/matmul.ptx"))?;
     let func = module.load_function("gemm_kernel_fp16").unwrap();
 
-    let threads_per_block = (32, 32, 1);
+    let threads_per_block = (32, 1, 1);
     let blocks_per_grid = (
-        (n + threads_per_block.0 - 1) / threads_per_block.0,
-        (m + threads_per_block.1 - 1) / threads_per_block.1,
+        (n + 16 - 1) / 16,
+        (m + 16 - 1) / 16,
         1
     );
     let cfg = LaunchConfig {
