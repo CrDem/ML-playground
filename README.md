@@ -56,7 +56,7 @@ Tile size: 32x32
 | 2048 | 2048 | 2048 | 274.84  | 0.000954 |
 | 512  | 1024 | 2048 | 1107.58 | 0.000550 |
 
-Kernel: The simplest tensor cores matmul
+Kernel: The simplest Tensor Core Matmul
 Tile size: 16x16 (processed by single warp)
 | M    | K    | N    | GFLOPS  | RMSE     |
 | ---- | ---- | ---- | ------- | -------- |
@@ -65,3 +65,13 @@ Tile size: 16x16 (processed by single warp)
 | 1024 | 1024 | 1024 | 3617.91 | 0.001059 |
 | 2048 | 2048 | 2048 |  927.90 | 0.002071 |
 | 512  | 1024 | 2048 | 3610.51 | 0.001053 |
+
+Kernel: Two-level tiled Tensor Core Matmul
+Block tile size: 32x32 - processed by 4 warps (16x16 warp tiles)
+| M    | K    | N    | GFLOPS  | RMSE     |
+| ---- | ---- | ---- | ------- | -------- |
+| 256  | 256  | 256  | 1124.09 | 0.000196 |
+| 512  | 512  | 512  | 3277.44 | 0.000551 |
+| 1024 | 1024 | 1024 | 4516.30 | 0.001068 |
+| 2048 | 2048 | 2048 | 1188.92 | 0.002079 |
+| 512  | 1024 | 2048 | 4500.85 | 0.001081 |

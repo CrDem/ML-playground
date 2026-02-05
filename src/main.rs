@@ -161,10 +161,10 @@ fn main() -> anyhow::Result<()> {
     let module = ctx.load_module(Ptx::from_file("./shaders/matmul.ptx"))?;
     let func = module.load_function("gemm_kernel_fp16").unwrap();
 
-    let threads_per_block = (32, 1, 1);
+    let threads_per_block = (64, 2, 1);
     let blocks_per_grid = (
-        (n + 16 - 1) / 16,
-        (m + 16 - 1) / 16,
+        (n + 32 - 1) / 32,
+        (m + 32 - 1) / 32,
         1
     );
     let cfg = LaunchConfig {
